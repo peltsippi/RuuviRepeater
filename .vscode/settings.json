@@ -4,7 +4,7 @@
     "files.associations": {
         "*.ino": "cpp"
     },
-    "particle.firmwareVersion": "1.5.2",
-    "particle.targetPlatform": "xenon",
-    "particle.targetDevice": "e00fce686083d845e4c5f12c"
+    "particle.firmwareVersion": "6.2.1",
+    "particle.targetPlatform": "argon",
+    "particle.targetDevice": "e00fce6817fcb83b4e7b2873"
 }

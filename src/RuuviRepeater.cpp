@@ -12,6 +12,9 @@
   #include "Particle.h"
 #endif
 
+//#define argon
+//use this to get things to compile with argon
+
 // Let Device OS manage the connection to the Particle Cloud
 // no we don't, let's make it fully offline..
 // old xenon with zero networking capabilities..
@@ -54,33 +57,84 @@ void loop() {
 
 
 
-  BLE.setScanTimeout(50); // 50 = 500 ms probably ok?
+  BLE.setScanTimeout(50); // 50 = 500 ms probably ok? Changing it to 1,5s to see if it helps
+  //note: it did not help..
 
   int scanCount = BLE.scan(scanResults, SCAN_RESULT_MAX);
 
+  uint8_t blockingArray[scanCount][2];
+
   for (int i = 0; i < scanCount; i++) {
+
+    size_t len;
     uint8_t buf[BLE_MAX_ADV_DATA_LEN];
-		size_t len;
-    len= scanResults[i].advertisingData(buf, BLE_MAX_ADV_DATA_LEN);
+    size_t checksum[3];
+
+    #ifdef argon
+    len = scanResults[i].advertisingData().get(BleAdvertisingDataType::MANUFACTURER_SPECIFIC_DATA, buf, BLE_MAX_ADV_DATA_LEN);
+    checksum[0] = buf[0];
+    checksum[1] = buf[1];
+    checksum[2] = buf[2];
+    #else
+    len= scanResults[i].advertisingData(buf, BLE_MAX_ADV_DATA_LEN);  
+    checksum[0] = buf[5];
+    checksum[1] = buf[6];
+    checksum[2] = buf[7];
+    #endif
     
-    //Log.info("Len: %i, manufacturer %x", len, buf[7]);
-    //len is supposed to be: 31 and manufacturer: 5
-    if (buf[7] == 0x5 ) {
-      Log.info("Ruuvitag found! (%i) - %02x:%02x:%02x:%02x:%02x:%02x", len, scanResults[i].address[5], scanResults[i].address[4], scanResults[i].address[3], scanResults[i].address[2], scanResults[i].address[1], scanResults[i].address[0] );
+    //Log.info("Scanned: %02x %02x %02x %02x %02x %02x", buf[len-5], buf[len-4], buf[len-3], buf[len-2], buf[len-1], buf[len]);
+    //Log.info("Len: %i, manufacturer %02x %02x datatype: %02x", len, buf[6], buf[5], buf[7]);
+    //Log.info("Dump: len: %i, data: %02x %02x %02x %02x %02x %02x %02x %02x", len, buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7]);
+    //len is supposed to be: 31, manufactuer buf[6] = 04 buf[5] = 99and data format buf[7]: 5
+    if (checksum[2] == 0x5 and checksum[1] == 0x04 and checksum[0] == 0x99) {
       txData.clear();
       txData.set(buf, BLE_MAX_ADV_DATA_LEN);
-
-      BLE.setAddress(scanResults[i].address);
+      bool blocked = false;
+      #ifdef argon
+      Log.info("Ruuvitag found! Len: %i, Address: %02x %02x %02x %02x %02x %02x",len, buf[20], buf[21], buf[22], buf[23], buf[24], buf[25]);
       
+
+      for (int j = 0; j < i; j++) {
+        if (blockingArray[j][0] == buf[25] and blockingArray[j][1] == buf[26]) {
+          blocked = true;
+        }
+      }
+
+      blockingArray[i][0] = buf[25];
+      blockingArray[i][1] = buf[26];
+
+      //int type(BleAddressType type);
+      //int set(const uint8_t addr[BLE_SIG_ADDR_LEN], BleAddressType type = BleAddressType::PUBLIC);
+      
+      //BleAddress address = BleAddress(scanResults[i].address[], BleAddressType type = BleAddressType::PUBLIC);
+      
+      BLE.setAddress(scanResults[i].address());
+      #else
+      for (int j = 0; j < i; j++) {
+        if (blockingArray[j][0] == scanResults[i].address[1] and blockingArray[j][1] == scanResults[i].address[0]) {
+          blocked = true;
+        }
+      }
+
+      blockingArray[i][0] = scanResults[i].address[1];
+      blockingArray[i][1] = scanResults[i].address[0];
+      Log.info("Ruuvitag found! (%i) - %02x:%02x:%02x:%02x:%02x:%02x", len, scanResults[i].address[5], scanResults[i].address[4], scanResults[i].address[3], scanResults[i].address[2], scanResults[i].address[1], scanResults[i].address[0] );
+      BLE.setAddress(scanResults[i].address);
+      #endif
+
+      if (!blocked) {
       digitalWrite(MY_LED, HIGH);
       BLE.setAdvertisingData(&txData);
       BLE.advertise();
       delay(100);
       BLE.stopAdvertising();
       digitalWrite(MY_LED, LOW);
+      }
+      else {
+        Log.info("double, retransmit blocked");
+      }
 
     }
-
 
 
   /* The data is decoded from "Manufacturer Specific Data" -field, 
@@ -104,6 +158,7 @@ void loop() {
   */
 
   }
+  Log.info("Starting over");
 
 
 }
