@@ -12,7 +12,7 @@
   #include "Particle.h"
 #endif
 
-//#define argon
+#define argon
 //use this to get things to compile with argon
 
 // Let Device OS manage the connection to the Particle Cloud
@@ -63,6 +63,7 @@ void loop() {
   int scanCount = BLE.scan(scanResults, SCAN_RESULT_MAX);
 
   uint8_t blockingArray[scanCount][2];
+  bool blocked = false;
 
   for (int i = 0; i < scanCount; i++) {
 
@@ -70,26 +71,42 @@ void loop() {
     uint8_t buf[BLE_MAX_ADV_DATA_LEN];
     size_t checksum[3];
 
+    /*Log.info("Buffer len %i dump: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x ", 
+      len, buf[0], buf[1], buf[2], buf[3], buf[4], 
+      buf[5], buf[6], buf[7], buf[8], buf[9], buf[10], 
+      buf[11], buf[12], buf[13], buf[14], buf[15], 
+      buf[16], buf[17], buf[18], buf[19], buf[20], buf[21],
+      buf[22], buf[23],buf[24],buf[25],buf[26],buf[27],
+      buf[28],buf[29], buf[30]);*/
+
     #ifdef argon
     len = scanResults[i].advertisingData().get(BleAdvertisingDataType::MANUFACTURER_SPECIFIC_DATA, buf, BLE_MAX_ADV_DATA_LEN);
+    //len = scanResults[i].advertisingData().get(buf, BLE_MAX_ADV_DATA_LEN);
     checksum[0] = buf[0];
     checksum[1] = buf[1];
     checksum[2] = buf[2];
+    uint8_t lenref = 26;
     #else
     len= scanResults[i].advertisingData(buf, BLE_MAX_ADV_DATA_LEN);  
     checksum[0] = buf[5];
     checksum[1] = buf[6];
     checksum[2] = buf[7];
+    uint8_t lenref = 38; //?!?!?
     #endif
     
     //Log.info("Scanned: %02x %02x %02x %02x %02x %02x", buf[len-5], buf[len-4], buf[len-3], buf[len-2], buf[len-1], buf[len]);
     //Log.info("Len: %i, manufacturer %02x %02x datatype: %02x", len, buf[6], buf[5], buf[7]);
     //Log.info("Dump: len: %i, data: %02x %02x %02x %02x %02x %02x %02x %02x", len, buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7]);
     //len is supposed to be: 31, manufactuer buf[6] = 04 buf[5] = 99and data format buf[7]: 5
-    if (checksum[2] == 0x5 and checksum[1] == 0x04 and checksum[0] == 0x99) {
+    if (checksum[2] == 0x5 and checksum[1] == 0x04 and checksum[0] == 0x99 and len == lenref) {
       txData.clear();
-      txData.set(buf, BLE_MAX_ADV_DATA_LEN);
-      bool blocked = false;
+
+      #ifdef argon
+      txData.appendCustomData(buf, len, false);
+      #else
+      txData.set(buf, len);
+      #endif
+
       #ifdef argon
       Log.info("Ruuvitag found! Len: %i, Address: %02x %02x %02x %02x %02x %02x",len, buf[20], buf[21], buf[22], buf[23], buf[24], buf[25]);
       
@@ -124,6 +141,7 @@ void loop() {
 
       if (!blocked) {
       digitalWrite(MY_LED, HIGH);
+
       BLE.setAdvertisingData(&txData);
       BLE.advertise();
       delay(100);
@@ -132,6 +150,7 @@ void loop() {
       }
       else {
         Log.info("double, retransmit blocked");
+        blocked = false;
       }
 
     }
@@ -158,7 +177,6 @@ void loop() {
   */
 
   }
-  Log.info("Starting over");
 
 
 }
