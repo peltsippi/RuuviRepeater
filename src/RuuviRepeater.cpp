@@ -57,8 +57,11 @@ void loop() {
 
 
 
-  BLE.setScanTimeout(50); // 50 = 500 ms probably ok? Changing it to 1,5s to see if it helps
-  //note: it did not help..
+  BLE.setScanTimeout(50); 
+  // 50 = 500 ms seems to be pretty ok
+  // 150 = 1,5s would receive all transmissions but introduce delays
+  //nope, increasing the time does not ensure that all beacons are found within the timeout...
+
 
   int scanCount = BLE.scan(scanResults, SCAN_RESULT_MAX);
 
@@ -102,13 +105,34 @@ void loop() {
       txData.clear();
 
       #ifdef argon
+
+      //char nameString[] = "Ruuvi xxxx";
+      //txData.appendLocalName("Ruuvi xxxx");
       txData.appendCustomData(buf, len, false);
+      //txData.append(SHORT_LOCAL_NAME)
+
+      //nameString = "Ruuvi";
+      //char fixed[] = "Ruuvi ";
+      //strcat(nameString, fixed);
+      //strcat(nameString, (char*)buf[24]);
+      //strcat(nameString, (char*)buf[25]);
+      
+      //Log.info("Local name: %c", (char *) nameString);
+
       #else
       txData.set(buf, len);
       #endif
 
+
+      /*
+      SHORT_LOCAL_NAME
+    COMPLETE_LOCAL_NAME
+      */
+
+
       #ifdef argon
-      Log.info("Ruuvitag found! Len: %i, Address: %02x %02x %02x %02x %02x %02x",len, buf[20], buf[21], buf[22], buf[23], buf[24], buf[25]);
+      Log.info("Ruuvitag found! Signal: %i length: %i, Address: %02x %02x %02x %02x %02x %02x",
+        scanResults[i].rssi(), len,  buf[20], buf[21], buf[22], buf[23], buf[24], buf[25]);
       
 
       for (int j = 0; j < i; j++) {
@@ -144,7 +168,7 @@ void loop() {
 
       BLE.setAdvertisingData(&txData);
       BLE.advertise();
-      delay(100);
+      delay(50+random(50));
       BLE.stopAdvertising();
       digitalWrite(MY_LED, LOW);
       }
