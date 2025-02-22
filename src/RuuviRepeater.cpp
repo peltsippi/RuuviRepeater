@@ -13,6 +13,7 @@
 #endif
 
 #define argon
+const bool packetDebug = false; // true -> show packet data on serial. false-> don't show
 //use this to get things to compile with argon
 
 // Let Device OS manage the connection to the Particle Cloud
@@ -87,13 +88,16 @@ void loop() {
     uint8_t buf[BLE_MAX_ADV_DATA_LEN];
     size_t checksum[3];
 
-    /*Log.info("Buffer len %i dump: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x ", 
+    if (packetDebug) {
+    Log.info("Buffer len %i dump: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x ", 
       len, buf[0], buf[1], buf[2], buf[3], buf[4], 
       buf[5], buf[6], buf[7], buf[8], buf[9], buf[10], 
       buf[11], buf[12], buf[13], buf[14], buf[15], 
       buf[16], buf[17], buf[18], buf[19], buf[20], buf[21],
       buf[22], buf[23],buf[24],buf[25],buf[26],buf[27],
-      buf[28],buf[29], buf[30]);*/
+      buf[28],buf[29], buf[30]);
+    }
+
 
     #ifdef argon
     len = scanResults[i].advertisingData().get(BleAdvertisingDataType::MANUFACTURER_SPECIFIC_DATA, buf, BLE_MAX_ADV_DATA_LEN);
@@ -107,7 +111,7 @@ void loop() {
     checksum[0] = buf[5];
     checksum[1] = buf[6];
     checksum[2] = buf[7];
-    uint8_t lenref = 38; //?!?!?
+    uint8_t lenref = 31; //?!?!?
     #endif
     
     //Log.info("Scanned: %02x %02x %02x %02x %02x %02x", buf[len-5], buf[len-4], buf[len-3], buf[len-2], buf[len-1], buf[len]);
@@ -176,7 +180,7 @@ void loop() {
 
       blockingArray[i][0] = scanResults[i].address[1];
       blockingArray[i][1] = scanResults[i].address[0];
-      Log.info("Ruuvitag found! (%i) - %02x:%02x:%02x:%02x:%02x:%02x", len, scanResults[i].address[5], scanResults[i].address[4], scanResults[i].address[3], scanResults[i].address[2], scanResults[i].address[1], scanResults[i].address[0] );
+      Log.info("Ruuvitag found! Signal: %i Lenght: %i Address: %02x:%02x:%02x:%02x:%02x:%02x", scanResults[i].rssi, len, scanResults[i].address[5], scanResults[i].address[4], scanResults[i].address[3], scanResults[i].address[2], scanResults[i].address[1], scanResults[i].address[0] );
       BLE.setAddress(scanResults[i].address);
       #endif
 
