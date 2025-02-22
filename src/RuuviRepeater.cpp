@@ -32,6 +32,19 @@ const size_t SCAN_RESULT_MAX = 30;
 
 const int TX_POWER = 8; //transmit power. +8 max, -12 minimum maybe?
 
+const int delayBLE = 32; //define delay for ble transmit part. 1600 = 1000 ms
+const int delayMillis = 20; //same delay in milliseconds
+/*
+Interval Value	Milliseconds	Description
+32	20 ms	Minimum value
+160	100 ms	Default value
+400	250 ms	
+800	500 ms	
+1600	1 sec	
+3200	2 sec	Upper end of recommended range
+16383	10.24 sec	Maximum value
+
+*/
 
 BleScanResult scanResults[SCAN_RESULT_MAX];
 
@@ -48,9 +61,9 @@ void setup() {
   BLE.setTxPower(TX_POWER); // MAX POWER
   BLE.on();
 
-  BLE.setAdvertisingInterval(1600); //1600: 1 sec. 400-> 0,25 sec. two transmissions
+  BLE.setAdvertisingInterval(delayBLE);
   //this is only for the transmit part. 1 transmit per cycle so let's keep this long.
-
+  //actually keeping this long prevents retransmitting multiple beacon results...
 }
 
 void loop() {
@@ -106,9 +119,13 @@ void loop() {
 
       #ifdef argon
 
-      //char nameString[] = "Ruuvi xxxx";
+      uint8_t nameString[] = "Ruuvi xxxx";
       //txData.appendLocalName("Ruuvi xxxx");
+      
+      //txData.append(particle::BleAdvertisingDataType::SHORT_LOCAL_NAME, nameString,sizeof(nameString)/sizeof(uint8_t),true);
       txData.appendCustomData(buf, len, false);
+      
+      //txData.append()
       //txData.append(SHORT_LOCAL_NAME)
 
       //nameString = "Ruuvi";
@@ -168,7 +185,8 @@ void loop() {
 
       BLE.setAdvertisingData(&txData);
       BLE.advertise();
-      delay(50+random(50));
+      delay(delayMillis);
+      //delay(50+random(50));
       BLE.stopAdvertising();
       digitalWrite(MY_LED, LOW);
       }
