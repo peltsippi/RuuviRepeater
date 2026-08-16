@@ -2,7 +2,12 @@
  * Project RuuviRepeater
  * Author: Timo Pelkonen
  * Date: 19.1.2025
+ * Updates 16.8.2026
  * BLE repeater for Ruuvitags
+ 
+ Compiles and tested for Argon & Xenon. The difference is the latest particle firmware and Xenon is stuck to much older version.
+ So you can compare your variant particle firmware version to these and send me a merge request from your more complete compile time
+ platform_id check clauses. Thank you!
  */
 
 #ifdef TESTING
@@ -12,7 +17,8 @@
   #include "Particle.h"
 #endif
 
-#define argon
+
+
 const bool packetDebug = false; // true -> show packet data on serial. false-> don't show
 //use this to get things to compile with argon
 
@@ -54,6 +60,17 @@ BleAdvertisingData txData;
 
 SerialLogHandler logHandler(LOG_LEVEL_INFO);
 
+void Blink(int qty) {
+	
+	for (int i = 0; i < qty; i++) {
+		
+	digitalWrite(MY_LED, HIGH);
+	delay(100);
+	digitalWrite(MY_LED, LOW);
+	delay(100);
+		  
+	}
+}
 
 void setup() {
 
@@ -63,24 +80,30 @@ void setup() {
   BLE.on();
 
   BLE.setAdvertisingInterval(delayBLE);
-  //this is only for the transmit part. 1 transmit per cycle so let's keep this long.
-  //actually keeping this long prevents retransmitting multiple beacon results...
+  //delay between transmissions, should be kept as short as possible.
+  
 }
 
 void loop() {
 
 
 
-  BLE.setScanTimeout(50); 
+  BLE.setScanTimeout(150); 
   // 50 = 500 ms seems to be pretty ok
   // 150 = 1,5s would receive all transmissions but introduce delays
   //nope, increasing the time does not ensure that all beacons are found within the timeout...
+  
+  //update: practically the delays are up to multiple minutes so no need to make this fast.
+  //Testing if longer duration helps with retransmitting all the beacons.
+  //5000 ms causes a lot of bloked retransmissions so not going to use that.
 
 
   int scanCount = BLE.scan(scanResults, SCAN_RESULT_MAX);
 
   uint8_t blockingArray[scanCount][2];
   bool blocked = false;
+  
+  int transmissions = 0;
 
   for (int i = 0; i < scanCount; i++) {
 
@@ -98,15 +121,16 @@ void loop() {
       buf[28],buf[29], buf[30]);
     }
 
-
-    #ifdef argon
+	#if PLATFORM_ID == PLATFORM_ARGON
     len = scanResults[i].advertisingData().get(BleAdvertisingDataType::MANUFACTURER_SPECIFIC_DATA, buf, BLE_MAX_ADV_DATA_LEN);
     //len = scanResults[i].advertisingData().get(buf, BLE_MAX_ADV_DATA_LEN);
     checksum[0] = buf[0];
     checksum[1] = buf[1];
     checksum[2] = buf[2];
     uint8_t lenref = 26;
-    #else
+	#endif
+	
+	#if PLATFORM_ID == PLATFORM_XENON
     len= scanResults[i].advertisingData(buf, BLE_MAX_ADV_DATA_LEN);  
     checksum[0] = buf[5];
     checksum[1] = buf[6];
@@ -114,16 +138,14 @@ void loop() {
     uint8_t lenref = 31; //?!?!?
     #endif
     
-    //Log.info("Scanned: %02x %02x %02x %02x %02x %02x", buf[len-5], buf[len-4], buf[len-3], buf[len-2], buf[len-1], buf[len]);
-    //Log.info("Len: %i, manufacturer %02x %02x datatype: %02x", len, buf[6], buf[5], buf[7]);
-    //Log.info("Dump: len: %i, data: %02x %02x %02x %02x %02x %02x %02x %02x", len, buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7]);
+
     //len is supposed to be: 31, manufactuer buf[6] = 04 buf[5] = 99and data format buf[7]: 5
     if (checksum[2] == 0x5 and checksum[1] == 0x04 and checksum[0] == 0x99 and len == lenref) {
       txData.clear();
 
-      #ifdef argon
+	#if PLATFORM_ID == PLATFORM_ARGON
 
-      uint8_t nameString[] = "Ruuvi xxxx";
+      //uint8_t nameString[] = "Ruuvi xxxx";
       //txData.appendLocalName("Ruuvi xxxx");
       
       //txData.append(particle::BleAdvertisingDataType::SHORT_LOCAL_NAME, nameString,sizeof(nameString)/sizeof(uint8_t),true);
@@ -140,9 +162,11 @@ void loop() {
       
       //Log.info("Local name: %c", (char *) nameString);
 
-      #else
-      txData.set(buf, len);
-      #endif
+	#endif
+	
+	#if PLATFORM_ID == PLATFORM_XENON
+       txData.set(buf, len);
+    #endif
 
 
       /*
@@ -150,10 +174,10 @@ void loop() {
     COMPLETE_LOCAL_NAME
       */
 
+	#if PLATFORM_ID == PLATFORM_ARGON
 
-      #ifdef argon
-      Log.info("Ruuvitag found! Signal: %i length: %i, Address: %02x %02x %02x %02x %02x %02x",
-        scanResults[i].rssi(), len,  buf[20], buf[21], buf[22], buf[23], buf[24], buf[25]);
+      Log.info("Ruuvitag %02x %02x %02x %02x %02x %02x found! Signal: %i", buf[20], buf[21], buf[22], buf[23], buf[24], buf[25],
+        scanResults[i].rssi());
       
 
       for (int j = 0; j < i; j++) {
@@ -162,6 +186,7 @@ void loop() {
         }
       }
 
+		//array to check if there are retransmissions within and block any.
       blockingArray[i][0] = buf[25];
       blockingArray[i][1] = buf[26];
 
@@ -169,9 +194,14 @@ void loop() {
       //int set(const uint8_t addr[BLE_SIG_ADDR_LEN], BleAddressType type = BleAddressType::PUBLIC);
       
       //BleAddress address = BleAddress(scanResults[i].address[], BleAddressType type = BleAddressType::PUBLIC);
+	  
+	  
       
       BLE.setAddress(scanResults[i].address());
-      #else
+	  
+	  #endif
+	  #if PLATFORM_ID == PLATFORM_XENON
+      
       for (int j = 0; j < i; j++) {
         if (blockingArray[j][0] == scanResults[i].address[1] and blockingArray[j][1] == scanResults[i].address[0]) {
           blocked = true;
@@ -180,19 +210,25 @@ void loop() {
 
       blockingArray[i][0] = scanResults[i].address[1];
       blockingArray[i][1] = scanResults[i].address[0];
-      Log.info("Ruuvitag found! Signal: %i Lenght: %i Address: %02x:%02x:%02x:%02x:%02x:%02x", scanResults[i].rssi, len, scanResults[i].address[5], scanResults[i].address[4], scanResults[i].address[3], scanResults[i].address[2], scanResults[i].address[1], scanResults[i].address[0] );
+      Log.info("Ruuvitag %02x:%02x:%02x:%02x:%02x:%02x found! Signal: %i", scanResults[i].address[5], scanResults[i].address[4], scanResults[i].address[3], scanResults[i].address[2], scanResults[i].address[1], scanResults[i].address[0], scanResults[i].rssi );
       BLE.setAddress(scanResults[i].address);
       #endif
 
       if (!blocked) {
-      digitalWrite(MY_LED, HIGH);
+
+	  transmissions ++;
 
       BLE.setAdvertisingData(&txData);
       BLE.advertise();
-      delay(delayMillis);
+      delay(delayMillis + random(50));
       //delay(50+random(50));
       BLE.stopAdvertising();
-      digitalWrite(MY_LED, LOW);
+	  
+	  BLE.advertise();
+	  delay(delayMillis + random(50));
+	  BLE.stopAdvertising();
+	  //trying double advertisement to see if it helps with retransmissions not getting through
+
       }
       else {
         Log.info("double, retransmit blocked");
@@ -223,6 +259,10 @@ void loop() {
   */
 
   }
+  Log.info("Heard %i transmissions and retransmitted %i.", scanCount, transmissions);
+  
+  Blink(transmissions);
 
 
 }
+
